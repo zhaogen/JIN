@@ -1,1 +1,209 @@
+import pygame
+import random
+
+# Initialize Pygame
+pygame.init()
+
+# Screen dimensions
+WIDTH, HEIGHT = 800, 600
+
+# Colors
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+RED = (255, 0, 0)
+GREEN = (0, 255, 0)
+BLUE = (0, 0, 255)
+
+# Initialize screen
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("1942 Style Shooting Game")
+
+# Clock and FPS
+clock = pygame.time.Clock()
+FPS = 60
+
+# Turret class
+class Turret(pygame.sprite.Sprite):
+    def __init__(self, x, y):
+        super().__init__()
+        self.image = pygame.Surface((40, 40))  # Adjusted to represent a plane
+        self.image.fill(BLUE)
+        self.rect = self.image.get_rect(center=(x, y))
+        self.speed = 5
+        self.bullet_speed = 7  # Initial bullet speed
+
+    def update(self, keys):
+        if keys[pygame.K_w] and self.rect.top > 0:
+            self.rect.y -= self.speed
+        if keys[pygame.K_s] and self.rect.bottom < HEIGHT:
+            self.rect.y += self.speed
+        if keys[pygame.K_a] and self.rect.left > 0:
+            self.rect.x -= self.speed
+        if keys[pygame.K_d] and self.rect.right < WIDTH:
+            self.rect.x += self.speed
+
+    def shoot(self, bullets_group, target_pos):
+        bullet = Bullet(self.rect.centerx, self.rect.top, target_pos, self.bullet_speed)
+        bullets_group.add(bullet)
+
+# Enemy class
+class Enemy(pygame.sprite.Sprite):
+    def __init__(self, speed):
+        super().__init__()
+        self.image = pygame.Surface((30, 30))
+        self.image.fill(RED)
+        self.rect = self.image.get_rect()
+        self.rect.x = random.randint(0, WIDTH - self.rect.width)
+        self.rect.y = random.randint(-100, -40)
+        self.speed = speed
+
+    def update(self):
+        self.rect.y += self.speed
+        if self.rect.top > HEIGHT:
+            self.kill()
+            return True
+        return False
+
+# Bullet class
+class Bullet(pygame.sprite.Sprite):
+    def __init__(self, x, y, target_pos, speed):
+        super().__init__()
+        self.image = pygame.Surface((5, 15))
+        self.image.fill(GREEN)
+        self.rect = self.image.get_rect(center=(x, y))
+
+        # Calculate direction
+        direction = pygame.math.Vector2(target_pos[0] - x, target_pos[1] - y)
+        if direction.length() != 0:
+            direction = direction.normalize()
+        self.velocity = direction * speed
+
+    def update(self):
+        self.rect.x += self.velocity.x
+        self.rect.y += self.velocity.y
+        if self.rect.bottom < 0 or self.rect.top > HEIGHT or self.rect.left > WIDTH or self.rect.right < 0:
+            self.kill()
+
+# Initialize groups
+all_sprites = pygame.sprite.Group()
+all_enemies = pygame.sprite.Group()
+bullets = pygame.sprite.Group()
+
+turret = Turret(WIDTH // 2, HEIGHT - 60)
+all_sprites.add(turret)
+
+# Game variables
+running = True
+spawn_timer = 0
+score = 0
+round_number = 1
+missed_enemies = 0
+font = pygame.font.Font(None, 36)
+max_rounds = 3
+max_misses = [5, 10, 15]  # Maximum misses per round
+
+game_state = "start"  # "start", "play", "game_over"
+
+def draw_start_screen():
+    screen.fill(BLACK)
+    title_text = font.render("1942 Style Shooting Game", True, WHITE)
+    start_button_text = font.render("Start Game", True, BLACK)
+
+    title_rect = title_text.get_rect(center=(WIDTH // 2, HEIGHT // 3))
+    button_rect = pygame.Rect(WIDTH // 2 - 100, HEIGHT // 2, 200, 50)
+
+    pygame.draw.rect(screen, WHITE, button_rect)
+    screen.blit(title_text, title_rect)
+    screen.blit(start_button_text, (button_rect.x + 50, button_rect.y + 10))
+
+    return button_rect
+
+while running:
+    keys = pygame.key.get_pressed()
+
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+        if game_state == "start" and event.type == pygame.MOUSEBUTTONDOWN:
+            mouse_pos = event.pos
+            if draw_start_screen().collidepoint(mouse_pos):
+                game_state = "play"
+
+        if game_state == "play" and event.type == pygame.MOUSEBUTTONDOWN:
+            turret.shoot(bullets, pygame.mouse.get_pos())
+
+    if game_state == "start":
+        button_rect = draw_start_screen()
+        pygame.display.flip()
+        clock.tick(FPS)
+        continue
+
+    # Spawn enemies based on round settings
+    spawn_timer += 1
+    if spawn_timer > round_settings[round_number - 1]["spawn_rate"]:
+        enemy = Enemy(round_settings[round_number - 1]["enemy_speed"])
+        all_sprites.add(enemy)
+        all_enemies.add(enemy)
+        spawn_timer = 0
+
+    # Update
+    turret.update(keys)
+    bullets.update()
+
+    # Update enemies and track missed ones
+    for enemy in all_enemies:
+        if enemy.update():
+            missed_enemies += 1
+
+    # Collision detection
+    for bullet in bullets:
+        hit_enemies = pygame.sprite.spritecollide(bullet, all_enemies, True)
+        for enemy in hit_enemies:
+            score += 10
+            bullet.kill()
+
+    # Check for round progression
+    if score >= round_number * 100 and round_number < max_rounds:
+        round_number += 1
+        score = 0
+        missed_enemies = 0
+        turret.bullet_speed += 2  # Increase bullet speed each round
+
+    # Check for game over conditions
+    if missed_enemies > max_misses[round_number - 1]:
+        game_state = "game_over"
+        game_result = "Game Over! You missed too many enemies."
+
+    # Check for game completion
+    if round_number == max_rounds and score >= 300:
+        game_state = "game_over"
+        game_result = "Congratulations! You won the game!"
+
+    # Draw
+    screen.fill(BLACK)  # Set background color to black
+    all_sprites.draw(screen)
+    bullets.draw(screen)
+
+    # Display score, round, and missed enemies
+    score_text = font.render(f"Score: {score}", True, WHITE)
+    round_text = font.render(f"Round: {round_number}/{max_rounds}", True, WHITE)
+    missed_text = font.render(f"Missed: {missed_enemies}/{max_misses[round_number - 1]}", True, WHITE)
+    screen.blit(score_text, (10, 10))
+    screen.blit(round_text, (10, 40))
+    screen.blit(missed_text, (10, 70))
+
+    pygame.display.flip()
+    clock.tick(FPS)
+
+    if game_state == "game_over":
+        break
+
+# Game over screen
+screen.fill(BLACK)
+game_over_text = font.render(game_result, True, WHITE)
+screen.blit(game_over_text, (WIDTH // 2 - game_over_text.get_width() // 2, HEIGHT // 2 - 50))
+pygame.display.flip()
+pygame.time.wait(5000)
+
+pygame.quit()
 

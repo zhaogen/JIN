@@ -54,6 +54,12 @@ pip install pygame
 
 ---
 
+## 게임 스크린샷
+![image](https://github.com/user-attachments/assets/0bf21477-2f6b-4199-995e-13052590eb11)
+
+
+---
+
 ## 파일 구조
 ```
 project-folder/
@@ -74,4 +80,5 @@ project-folder/
 이 프로젝트는 [MIT 라이선스](./LICENSE)를 따릅니다. 자세한 내용은 LICENSE 파일을 참조하세요.
 
 ---
+
 
